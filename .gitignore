@@ -77,4 +77,9 @@ experiments
 gh-pages
 gh-pages.pub
 
+venv/
+
 *.zip
+
+# Other
+uisrnn_tests/integration/fixtures
