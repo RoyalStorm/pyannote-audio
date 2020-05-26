@@ -1,9 +1,7 @@
 import numpy as np
-import torch
 from hdbscan import HDBSCAN
 from sklearn.cluster import DBSCAN
 from sklearn.manifold import TSNE
-from sklearn.neighbors import KNeighborsClassifier
 from spectralcluster import SpectralClusterer
 from umap import UMAP
 
@@ -62,44 +60,3 @@ def cluster_by_dbscan(embeddings,
 
 def cluster_by_spectral(embeddings):
     return SpectralClusterer(p_percentile=0.95, gaussian_blur_sigma=1).predict(embeddings)
-
-
-def setup_knn(embeddings_pull, ground_truth_labels, n_neighbors=15):
-    classifier = KNeighborsClassifier(n_neighbors=n_neighbors, weights='distance')
-    classifier.fit(embeddings_pull, ground_truth_labels)
-
-    return classifier
-
-
-def apply_sad(name):
-    pipeline = torch.hub.load('pyannote/pyannote-audio', 'sad', pipeline=True)
-
-    test_file = {'uri': f'{name}.wav',
-                 'audio': f'./uisrnn_tests/integration/fixtures/rtk/{name}/{name}.wav'}
-
-    speech_activity_detection = pipeline(test_file)
-
-    speech = []
-    for speech_region in speech_activity_detection.get_timeline():
-        speech.append((round(speech_region.start * 1000), round(speech_region.end * 1000)))
-
-    return speech
-
-
-def identify_speakers(classifier, embeddings, predicted_labels):
-    clusters = list(np.unique(predicted_labels))
-
-    identified_speakers = dict.fromkeys(clusters)
-
-    for cluster in identified_speakers.keys():
-        indexes = np.where(np.array(predicted_labels) == cluster)[0]
-
-        selected_embeddings = []
-        for i in indexes:
-            selected_embeddings.append(embeddings[i])
-
-        selected_embeddings = np.array(selected_embeddings)
-
-        neigh_dist, neigh_ind = classifier.kneighbors(selected_embeddings, return_distance=True)
-
-    return identified_speakers

@@ -14,10 +14,7 @@ embeddings = cluster_utils.umap_transform(embeddings)
 predicted_labels = cluster_utils.cluster_by_hdbscan(embeddings)
 
 ground_truth_map = new_utils.ground_truth_map(consts.audio_dir)
-
-speech_segments = cluster_utils.apply_sad(wav[0].split('/')[5])
-speaker_slice = new_utils.result_map(intervals, predicted_labels)
-result_map = new_utils.remove_silence(speaker_slice, speech_segments)
+result_map = new_utils.result_map(intervals, predicted_labels)
 
 der = new_utils.der(ground_truth_map, result_map)
 

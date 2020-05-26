@@ -5,6 +5,7 @@ import librosa
 import numpy as np
 import simpleder
 import tensorflow as tf
+import torch
 from tensorboard.plugins import projector
 from tensorflow.compat.v1 import InteractiveSession
 from tensorflow.compat.v1 import global_variables_initializer
@@ -85,13 +86,24 @@ def _get_audio(audio_folder):
 
 def _vad(audio_path, sr):
     audio, _ = librosa.load(audio_path, sr=sr)
-    intervals = librosa.effects.split(audio, top_db=20)
-    audio_output = []
 
-    for sliced in intervals:
+    audio_name = audio_path.split('/')[5]
+    sad = torch.hub.load('pyannote/pyannote-audio', 'sad', pipeline=True)
+
+    protocol = {'uri': f'{audio_name}.wav',
+                'audio': audio_path}
+
+    sad_scores = sad(protocol)
+
+    speech = []
+    for speech_region in sad_scores.get_timeline():
+        speech.append((int(round(speech_region.start, 3) * sr), int(round(speech_region.end, 3) * sr)))
+
+    audio_output = []
+    for sliced in speech:
         audio_output.extend(audio[sliced[0]:sliced[1]])
 
-    return np.array(audio_output), (intervals / sr * 1000).astype(int)
+    return np.array(audio_output), (np.array(speech) / sr * 1000).astype(int)
 
 
 def der(ground_truth_map, result_map):
@@ -160,64 +172,6 @@ def linear_spectogram_from_wav(wav, hop_length, win_length, n_fft=1024):
     linear = librosa.stft(wav, n_fft=n_fft, win_length=win_length, hop_length=hop_length)
 
     return linear.T
-
-
-def load_voices_pull(dir):
-    true_labels = []
-    voices_pull_embeddings = []
-
-    for speaker in os.listdir(dir):
-        wavs = _get_audio(os.path.join(dir, speaker))
-
-        all_specs = []
-        for wav in wavs:
-            specs, _ = slide_window(audio_path=wav,
-                                    embedding_per_second=consts.slide_window_params.embedding_per_second,
-                                    overlap_rate=consts.slide_window_params.overlap_rate)
-            all_specs.extend(specs)
-
-        voices_pull_embeddings.extend(generate_embeddings(all_specs))
-        true_labels.extend([speaker for _ in range(len(all_specs))])
-
-    return np.array(voices_pull_embeddings), true_labels
-
-
-def remove_silence(speaker_slice, speech_segments):
-    speaker_slice_new = dict.fromkeys(speaker_slice.keys())
-    for speaker, timestamps_list in sorted(speaker_slice.items()):
-        timestamps_list_new = []
-        for i, timestamp in enumerate(timestamps_list):
-            for speech in speech_segments:
-                timestamp_new = dict.fromkeys(['start', 'stop'])
-
-                if list(timestamp.values())[0] in range(*speech) and list(timestamp.values())[1] in range(*speech):
-                    timestamps_list_new.append(timestamp)
-                    continue
-
-                if speech[0] in range(*timestamp.values()) and speech[1] in range(*timestamp.values()):
-                    timestamp_new['start'] = speech[0]
-                    timestamp_new['stop'] = speech[1]
-
-                    timestamps_list_new.append(timestamp_new)
-                    continue
-
-                if timestamp['start'] in range(*speech):
-                    timestamp_new['start'] = timestamp['start']
-                    timestamp_new['stop'] = speech[1]
-
-                    timestamps_list_new.append(timestamp_new)
-                    continue
-
-                if timestamp['stop'] in range(*speech):
-                    timestamp_new['start'] = speech[0]
-                    timestamp_new['stop'] = timestamp['stop']
-
-                    timestamps_list_new.append(timestamp_new)
-                    continue
-
-        speaker_slice_new[speaker] = timestamps_list_new
-
-    return speaker_slice_new
 
 
 def result_map(intervals, predicted_labels):
