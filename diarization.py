@@ -21,10 +21,6 @@ der = new_utils.der(ground_truth_map, result_map)
 plot = PlotDiar(true_map=ground_truth_map, map=result_map, wav=consts.audio_dir, gui=True, size=(24, 6))
 plot.draw_true_map()
 plot.draw_map()
-plot.show()
+# plot.show()
 
-new_utils.save_and_report(plot=plot,
-                          result_map=result_map,
-                          dim_reduce_params=consts.umap_params,
-                          cluster_params=consts.hdbscan_params,
-                          der=der)
+new_utils.save_and_report(plot=plot, result_map=result_map, der=der)

@@ -145,25 +145,21 @@ def ground_truth_map(audio_folder):
             break
 
     with open(ground_truth_map_file, 'r') as file:
-        spk_number = 0
-        ground_truth_map = {spk_number: []}
-
-        def empty(line):
-            return line in ['\n', '\r\n']
+        ground_truth_map = {}
 
         for line in file:
-            if empty(line):
-                spk_number += 1
-                ground_truth_map[spk_number] = []
+            start, stop, speaker = line.split(' ')[0], line.split(' ')[1], line.split(' ')[2].replace('\n', '')
+
+            dt_start = datetime.strptime(start, '%M:%S.%f')
+            dt_stop = datetime.strptime(stop, '%M:%S.%f')
+
+            start = dt_start.minute * 60_000 + dt_start.second * 1_000 + dt_start.microsecond / 1_000
+            stop = dt_stop.minute * 60_000 + dt_stop.second * 1_000 + dt_stop.microsecond / 1_000
+
+            if speaker in ground_truth_map:
+                ground_truth_map[speaker].append({'start': start, 'stop': stop})
             else:
-                start, stop = line.split(' ')[0], line.split(' ')[1].replace('\n', '')
-                dt_start = datetime.strptime(start, '%M:%S.%f')
-                dt_stop = datetime.strptime(stop, '%M:%S.%f')
-
-                start = dt_start.minute * 60_000 + dt_start.second * 1_000 + dt_start.microsecond / 1_000
-                stop = dt_stop.minute * 60_000 + dt_stop.second * 1_000 + dt_stop.microsecond / 1_000
-
-                ground_truth_map[spk_number].append({'start': start, 'stop': stop})
+                ground_truth_map[speaker] = [{'start': start, 'stop': stop}]
 
     return ground_truth_map
 
@@ -205,10 +201,44 @@ def result_map(intervals, predicted_labels):
             speaker_slice[speaker][i]['start'] = s
             speaker_slice[speaker][i]['stop'] = e
 
-    return speaker_slice
+    speaker_slice_new = dict.fromkeys(speaker_slice.keys())
+    for speaker, timestamps_list in sorted(speaker_slice.items()):
+        timestamps_list_new = []
+        for i, timestamp in enumerate(timestamps_list):
+            for speech in intervals:
+                timestamp_new = dict.fromkeys(['start', 'stop'])
+
+                if list(timestamp.values())[0] in range(*speech) and list(timestamp.values())[1] in range(*speech):
+                    timestamps_list_new.append(timestamp)
+                    continue
+
+                if speech[0] in range(*timestamp.values()) and speech[1] in range(*timestamp.values()):
+                    timestamp_new['start'] = speech[0]
+                    timestamp_new['stop'] = speech[1]
+
+                    timestamps_list_new.append(timestamp_new)
+                    continue
+
+                if timestamp['start'] in range(*speech):
+                    timestamp_new['start'] = timestamp['start']
+                    timestamp_new['stop'] = speech[1]
+
+                    timestamps_list_new.append(timestamp_new)
+                    continue
+
+                if timestamp['stop'] in range(*speech):
+                    timestamp_new['start'] = speech[0]
+                    timestamp_new['stop'] = timestamp['stop']
+
+                    timestamps_list_new.append(timestamp_new)
+                    continue
+
+        speaker_slice_new[speaker] = timestamps_list_new
+
+    return speaker_slice_new
 
 
-def save_and_report(plot, result_map, dim_reduce_params, cluster_params, der=None, dir=consts.audio_dir):
+def save_and_report(plot, result_map, der=None, dir=consts.audio_dir):
     # Make checkpoint
     checkpoint_dir = os.path.join(dir, f'{datetime.now():%Y%m%dT%H%M%S}')
     os.mkdir(checkpoint_dir)
@@ -227,31 +257,6 @@ def save_and_report(plot, result_map, dim_reduce_params, cluster_params, der=Non
                 result.write(f'{_beautify_time(segment["start"])} --> {_beautify_time(segment["stop"])}\n')
 
         result.write(f'\n{der}')
-
-    # Write logs with testing params
-    with open(os.path.join(checkpoint_dir, consts.log_file), 'w') as log:
-        log.write(f'Dimension reduce by: {dim_reduce_params.name}\n')
-
-        if dim_reduce_params.name == 'UMAP':
-            log.write(f'    n_components = {dim_reduce_params.n_components}\n')
-            log.write(f'    n_neighbors = {dim_reduce_params.n_neighbors}\n')
-        elif dim_reduce_params.name == 't-SNE':
-            log.write(f'    n_components = {dim_reduce_params.n_components}\n')
-            log.write(f'    n_iter = {dim_reduce_params.n_iter}\n')
-            log.write(f'    learning_rate = {dim_reduce_params.learning_rate}\n')
-            log.write(f'    perplexity = {dim_reduce_params.perplexity}\n')
-
-        log.write(f'Clustering type by: {cluster_params.name}\n')
-
-        if cluster_params.name == 'HDBSCAN':
-            log.write(f'    min_cluster_size = {cluster_params.min_cluster_size}\n')
-            log.write(f'    min_samples = {cluster_params.min_samples}\n')
-        elif cluster_params.name == 'DBSCAN':
-            log.write(f'    eps = {cluster_params.eps}\n')
-            log.write(f'    min_samples = {cluster_params.min_samples}\n')
-
-        log.write(f'Embedding per second: {consts.slide_window_params.embedding_per_second}\n')
-        log.write(f'Overlap rate: {consts.slide_window_params.overlap_rate}')
 
     print(f'Diarization done. All results saved in {checkpoint_dir}.')
 

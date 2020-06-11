@@ -10,15 +10,10 @@ class Params(dict):
 
 
 # Contains *.wav file and ground_truth.txt file with true map
-audio_dir = './uisrnn_tests/integration/fixtures/rtk/anatoliy_1'
-
-# Voices pull dir
-voices_pull_dir = './uisrnn_tests/integration/fixtures/rtk/_voices_pull'
+audio_dir = './uisrnn_tests/integration/fixtures/rtk/svetlana_2'
 
 # File name with ground truth map
-ground_truth_map_file = 'ground_truth_without_silence.txt'
-# Log file name
-log_file = 'log.txt'
+ground_truth_map_file = 'ground_truth.txt'
 # File name with ground result map
 result_map_file = 'result.txt'
 
